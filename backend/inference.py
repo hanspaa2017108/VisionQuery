@@ -7,7 +7,7 @@ import cv2
 
 
 MAX_PROMPTS = 10
-DEFAULT_SAMPLE_FPS = 1.0
+DEFAULT_SAMPLE_FPS = 10.0
 MAX_SAMPLED_FRAMES = 900  # cap work to keep v0 responsive
 MAX_DETECTIONS = 5000  # cap response size
 
@@ -81,7 +81,7 @@ def run_yoloworld_query(
             sampled += 1
 
             # Ultralytics expects BGR numpy array (OpenCV format) is OK.
-            results = model.predict(frame_bgr, conf=conf, verbose=False)
+            results = model.predict(frame_bgr, conf=conf, verbose=False, device="mps")
             if not results:
                 frame_i += 1
                 continue

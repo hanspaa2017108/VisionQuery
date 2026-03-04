@@ -63,6 +63,7 @@ def _startup() -> None:
 
     VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
     app.state.model = YOLOWorld("yolov8m-worldv2.pt")
+    app.state.model.to("mps")
     # set_classes() mutates model state; keep single-flight inference for v0.
     app.state.model_lock = threading.Lock()
 
