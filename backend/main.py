@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import base64
 import shutil
 import threading
 import uuid
 from pathlib import Path
 
+import cv2
+import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from ultralytics import YOLOWorld
 
-from inference import parse_prompt, run_yoloworld_query
+from inference import parse_prompt, run_yoloworld_live_frame, run_yoloworld_query
 from llm_classes import prompt_to_classes
 
 
@@ -31,6 +34,13 @@ class QueryRequest(BaseModel):
 
 class ClassesRequest(BaseModel):
     prompt: str = Field(..., min_length=1)
+
+
+class LiveDetectRequest(BaseModel):
+    image_b64: str = Field(..., min_length=1)
+    prompt: str | None = None
+    classes: list[str] | None = None
+    conf: float = Field(0.25, ge=0, le=1)
 
 
 def _video_path(video_id: str) -> Path:
@@ -131,4 +141,40 @@ def query(req: QueryRequest) -> dict[str, object]:
 async def classes(req: ClassesRequest) -> dict[str, object]:
     classes = await prompt_to_classes(req.prompt)
     return {"classes": classes}
+
+
+@app.post("/live/detect")
+def live_detect(req: LiveDetectRequest) -> dict[str, object]:
+    classes = [c.strip() for c in (req.classes or []) if c and c.strip()]
+    if not classes:
+        classes = parse_prompt(req.prompt or "")
+    if not classes:
+        raise HTTPException(status_code=400, detail="Provide `classes` or a non-empty `prompt`")
+
+    raw = req.image_b64
+    if "," in raw:
+        raw = raw.split(",", 1)[1]
+    try:
+        image_bytes = base64.b64decode(raw)
+        arr = np.frombuffer(image_bytes, dtype=np.uint8)
+        frame_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid image payload: {e}") from e
+
+    if frame_bgr is None:
+        raise HTTPException(status_code=400, detail="Failed to decode image")
+
+    model = app.state.model
+    lock: threading.Lock = app.state.model_lock
+    with lock:
+        model.set_classes(classes[:10])
+        detections = run_yoloworld_live_frame(frame_bgr=frame_bgr, model=model, conf=req.conf)
+
+    h, w = frame_bgr.shape[:2]
+    return {
+        "detections": detections,
+        "frame_width": int(w),
+        "frame_height": int(h),
+        "classes": classes[:10],
+    }
 
