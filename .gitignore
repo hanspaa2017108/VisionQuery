@@ -218,3 +218,4 @@ backend/storage/videos/
 backend/.venv/
 *.mp4
 *.pt
+.gstack/

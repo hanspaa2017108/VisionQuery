@@ -36,7 +36,9 @@ export default function LiveOverlay({ classes, conf, sampleFps, onDetections }: 
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         if (videoRef.current && activeRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.play();
+          videoRef.current.play().catch(() => {
+            // AbortError when play() is interrupted by unmount/remount (React strict mode)
+          });
           setStatus("active");
         }
       } catch {
@@ -46,6 +48,10 @@ export default function LiveOverlay({ classes, conf, sampleFps, onDetections }: 
 
     return () => {
       activeRef.current = false;
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.srcObject = null;
+      }
       if (stream) {
         stream.getTracks().forEach((t) => t.stop());
       }
