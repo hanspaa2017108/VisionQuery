@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getVideoUrl, resolveClasses, runQuery, uploadVideo } from "./api.js";
+import LiveOverlay from "./components/LiveOverlay.jsx";
 import { VideoOverlay } from "./components/VideoOverlay.jsx";
 
 function formatTime(seconds) {
@@ -15,12 +16,14 @@ export default function App() {
 
   const [file, setFile] = useState(null);
   const [videoId, setVideoId] = useState("");
+  const [mode, setMode] = useState("video"); // video | live
   const [prompt, setPrompt] = useState("person, knife");
   const [promptClasses, setPromptClasses] = useState(["person", "knife"]);
   const [classesBusy, setClassesBusy] = useState(false);
   const [fps, setFps] = useState(1);
   const [conf, setConf] = useState(0.25);
-  const [detections, setDetections] = useState([]);
+  const [videoDetections, setVideoDetections] = useState([]);
+  const [liveDetections, setLiveDetections] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -62,7 +65,7 @@ export default function App() {
     try {
       const data = await uploadVideo(file);
       setVideoId(data.video_id);
-      setDetections([]);
+      setVideoDetections([]);
       if (videoRef.current) {
         videoRef.current.currentTime = 0;
       }
@@ -74,6 +77,9 @@ export default function App() {
   }
 
   async function onRunQuery() {
+    if (mode === "live") {
+      return;
+    }
     if (!videoId) {
       setError("Upload a video first.");
       return;
@@ -88,7 +94,7 @@ export default function App() {
         fps: Number(fps),
         conf: Number(conf),
       });
-      setDetections(Array.isArray(data.detections) ? data.detections : []);
+      setVideoDetections(Array.isArray(data.detections) ? data.detections : []);
     } catch (e) {
       setError(e.message || String(e));
     } finally {
@@ -97,6 +103,7 @@ export default function App() {
   }
 
   function seekTo(t) {
+    if (mode !== "video") return;
     const v = videoRef.current;
     if (!v) return;
     v.currentTime = Number(t) || 0;
@@ -182,17 +189,48 @@ export default function App() {
               <h1 style={{ margin: 0, fontSize: 30, letterSpacing: 0.2 }}>VisionQuery</h1>
               <p style={{ margin: "6px 0 0", opacity: 0.9 }}>Natural-language search for video surveillance</p>
             </div>
-            <div style={{ padding: "6px 10px", borderRadius: 999, background: "rgba(255,255,255,0.2)", fontSize: 13 }}>
-              v0 MVP
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                onClick={() => setMode("video")}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.35)",
+                  background: mode === "video" ? "rgba(255,255,255,0.25)" : "transparent",
+                  color: "white",
+                  cursor: "pointer",
+                  fontSize: 13,
+                }}
+              >
+                Video System
+              </button>
+              <button
+                onClick={() => setMode("live")}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.35)",
+                  background: mode === "live" ? "rgba(255,255,255,0.25)" : "transparent",
+                  color: "white",
+                  cursor: "pointer",
+                  fontSize: 13,
+                }}
+              >
+                Live System
+              </button>
+              <div style={{ padding: "6px 10px", borderRadius: 999, background: "rgba(255,255,255,0.2)", fontSize: 13 }}>
+                v0 MVP
+              </div>
             </div>
           </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" }}>
           <div>
-            <div style={card}>
-              <div style={{ fontWeight: 700, marginBottom: 8 }}>Upload</div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {mode === "video" ? (
+              <div style={card}>
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>Upload</div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <input
                 type="file"
                 accept="video/*"
@@ -208,8 +246,16 @@ export default function App() {
                   video_id: <code>{videoId}</code>
                 </span>
               ) : null}
-            </div>
-          </div>
+                </div>
+              </div>
+            ) : (
+              <div style={card}>
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>Live Webcam</div>
+                <div style={{ color: "#64748b", fontSize: 14 }}>
+                  Live detection is running continuously with current classes/prompt.
+                </div>
+              </div>
+            )}
 
             <div style={{ ...card, marginTop: 12 }}>
               <div style={{ fontWeight: 700, marginBottom: 8 }}>Query Controls</div>
@@ -273,8 +319,13 @@ export default function App() {
                 </label>
 
                 <div style={{ display: "flex", alignItems: "end" }}>
-                    <button onClick={onRunQuery} disabled={busy || !videoId} style={primaryButton}>
-                    {busy ? "Working..." : "Run Query"}
+                    <button
+                      onClick={onRunQuery}
+                      disabled={mode === "video" ? busy || !videoId : true}
+                      style={primaryButton}
+                      title={mode === "live" ? "Live mode auto-runs detection" : ""}
+                    >
+                    {mode === "video" ? (busy ? "Working..." : "Run Query") : "Auto Live"}
                   </button>
                 </div>
               </div>
@@ -299,30 +350,40 @@ export default function App() {
 
         <div>
             <div style={card}>
-              <div style={{ fontWeight: 700, marginBottom: 8 }}>Video</div>
-            {videoId ? (
-              <VideoOverlay
-                ref={videoRef}
-                videoSrc={videoUrl}
-                detections={detections}
-                fps={Number(fps) || 1}
-              />
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>{mode === "video" ? "Video" : "Live"}</div>
+            {mode === "video" ? (
+              videoId ? (
+                <VideoOverlay
+                  ref={videoRef}
+                  videoSrc={videoUrl}
+                  detections={videoDetections}
+                  fps={Number(fps) || 1}
+                />
+              ) : (
+                  <div style={{ color: "#64748b" }}>Upload a video to preview it here.</div>
+              )
             ) : (
-                <div style={{ color: "#64748b" }}>Upload a video to preview it here.</div>
+              <LiveOverlay
+                prompt={prompt}
+                classes={promptClasses?.length ? promptClasses : undefined}
+                conf={Number(conf) || 0.25}
+                sampleFps={Number(fps) || 1}
+                onDetections={(next) => setLiveDetections(Array.isArray(next) ? next : [])}
+              />
             )}
           </div>
 
             <div style={{ ...card, marginTop: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
               <strong>Detections</strong>
-                <span style={{ color: "#64748b" }}>{detections.length} items</span>
+                <span style={{ color: "#64748b" }}>{(mode === "live" ? liveDetections : videoDetections).length} items</span>
             </div>
 
             <div style={{ marginTop: 10, maxHeight: 420, overflow: "auto", display: "grid", gap: 8 }}>
-              {detections.length === 0 ? (
+              {(mode === "live" ? liveDetections : videoDetections).length === 0 ? (
                   <div style={{ color: "#64748b" }}>Run a query to see results.</div>
               ) : (
-                detections.map((d, idx) => (
+                (mode === "live" ? liveDetections : videoDetections).map((d, idx) => (
                   <button
                     key={`${d.t}-${d.label}-${idx}`}
                     onClick={() => seekTo(d.t)}
