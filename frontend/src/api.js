@@ -47,3 +47,12 @@ export async function runQuery({ video_id, prompt, classes, fps, conf }) {
   return jsonOrThrow(res);
 }
 
+export async function runLiveDetect({ image_b64, prompt, classes, conf }) {
+  const res = await fetch(`${API_BASE}/live/detect`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image_b64, prompt, classes, conf }),
+  });
+  return jsonOrThrow(res);
+}
+
