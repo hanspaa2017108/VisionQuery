@@ -212,7 +212,9 @@ __marimo__/
 .DS_Store
 frontend/node_modules/
 frontend/dist/
+frontend/.next/
+frontend-old/
 backend/storage/videos/
+backend/.venv/
 *.mp4
 *.pt
-*.mp4
