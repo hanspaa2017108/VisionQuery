@@ -14,6 +14,14 @@ Supports:
 
 No tracking, embeddings, async jobs, or exports.
 
+## Output Screenshots
+
+### Video Upload Mode
+![Upload Mode](assets/upload_mode.png)
+
+### Live Webcam Mode
+![Live Mode](assets/live_mode.png)
+
 ## Run (Backend)
 
 ```bash
