@@ -1,0 +1,16 @@
+[project]
+name = "vision-query-backend"
+version = "0.1.0"
+description = "Vision Query - ChatGPT for Video Surveillance (Backend)"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

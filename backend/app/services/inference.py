@@ -6,16 +6,13 @@ from typing import Any
 import cv2
 
 
-MAX_PROMPTS = 10
 DEFAULT_SAMPLE_FPS = 1.0
-MAX_SAMPLED_FRAMES = 900  # cap work to keep v0 responsive
-MAX_DETECTIONS = 5000  # cap response size
 
 
-def parse_prompt(prompt: str) -> list[str]:
+def parse_prompt(prompt: str, *, max_classes: int = 10) -> list[str]:
     items = [p.strip() for p in (prompt or "").split(",")]
     items = [p for p in items if p]
-    return items[:MAX_PROMPTS]
+    return items[:max_classes]
 
 
 def _safe_video_fps(cap: cv2.VideoCapture) -> float:
@@ -45,7 +42,9 @@ def _label_from_names(names: object, cls_i: int) -> str:
     return str(cls_i)
 
 
-def _detections_from_results(*, model: Any, results: Any, t: float | None = None) -> list[dict[str, object]]:
+def _detections_from_results(
+    *, model: Any, results: Any, t: float | None = None, max_detections: int = 5000
+) -> list[dict[str, object]]:
     out: list[dict[str, object]] = []
     if not results:
         return out
@@ -73,8 +72,10 @@ def _detections_from_results(*, model: Any, results: Any, t: float | None = None
     return out
 
 
-def run_yoloworld_live_frame(*, frame_bgr: Any, model: Any, conf: float) -> list[dict[str, object]]:
-    results = model.predict(frame_bgr, conf=conf, verbose=False, device="mps")
+def run_yoloworld_live_frame(
+    *, frame_bgr: Any, model: Any, conf: float, device: str = "mps"
+) -> list[dict[str, object]]:
+    results = model.predict(frame_bgr, conf=conf, verbose=False, device=device)
     return _detections_from_results(model=model, results=results, t=None)
 
 
@@ -85,6 +86,9 @@ def run_yoloworld_query(
     classes: list[str],
     fps: float,
     conf: float,
+    device: str = "mps",
+    max_sampled_frames: int = 900,
+    max_detections: int = 5000,
 ) -> list[dict[str, object]]:
     if not classes:
         return []
@@ -101,7 +105,7 @@ def run_yoloworld_query(
     detections: list[dict[str, object]] = []
 
     try:
-        while sampled < MAX_SAMPLED_FRAMES and len(detections) < MAX_DETECTIONS:
+        while sampled < max_sampled_frames and len(detections) < max_detections:
             ok, frame_bgr = cap.read()
             if not ok:
                 break
@@ -113,11 +117,12 @@ def run_yoloworld_query(
             t = frame_i / native_fps
             sampled += 1
 
-            # Ultralytics expects BGR numpy array (OpenCV format) is OK.
-            results = model.predict(frame_bgr, conf=conf, verbose=False, device="mps")
-            frame_dets = _detections_from_results(model=model, results=results, t=t)
+            results = model.predict(frame_bgr, conf=conf, verbose=False, device=device)
+            frame_dets = _detections_from_results(
+                model=model, results=results, t=t, max_detections=max_detections
+            )
             if frame_dets:
-                remaining = MAX_DETECTIONS - len(detections)
+                remaining = max_detections - len(detections)
                 if remaining > 0:
                     detections.extend(frame_dets[:remaining])
 
@@ -127,4 +132,3 @@ def run_yoloworld_query(
 
     detections.sort(key=lambda d: (float(d["t"]), -float(d["conf"])))
     return detections
-
